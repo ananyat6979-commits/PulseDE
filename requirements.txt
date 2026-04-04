@@ -1,0 +1,5 @@
+kafka-python
+requests
+python-dotenv
+transformers
+torch
