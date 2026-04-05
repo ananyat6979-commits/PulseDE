@@ -23,19 +23,20 @@ NewsAPI → fetch_headlines() → FinBERT Sentiment Model → JSON Storage → H
 General sentiment models (VADER, TextBlob) are trained on social media and reviews. Financial text has domain-specific language where words like "volatile", "correction", and "bearish" carry precise meanings. FinBERT is fine-tuned on financial news and SEC filings, making it significantly more accurate for market sentiment classification.
 
 ## Project Structure
-PulseDE/
-├── src/
-│   ├── main.py          # Core pipeline: ingest → analyze → persist
-│   ├── scheduler.py     # Hourly automation
-│   └── dashboard.py     # HTML dashboard server
-├── config/
-│   └── settings.py      # Centralized configuration
-├── data/
-│   └── results.json     # Sentiment output artifacts
-├── logs/
-│   └── pulsede.log      # Pipeline execution logs
-├── .env                 # API keys (never committed)
-└── requirements.txt
+
+    PulseDE/
+    ├── src/
+    │   ├── main.py          # Core pipeline: ingest → analyze → persist
+    │   ├── scheduler.py     # Hourly automation
+    │   └── dashboard.py     # HTML dashboard server
+    ├── config/
+    │   └── settings.py      # Centralized configuration
+    ├── data/
+    │   └── results.json     # Sentiment output artifacts
+    ├── logs/
+    │   └── pulsede.log      # Pipeline execution logs
+    ├── .env                 # API keys (never committed)
+    └── requirements.txt
 
 ## How to Run
 ```bash
@@ -72,7 +73,7 @@ python -m src.dashboard
 
 ## Key Engineering Decisions
 
-- **Error handling at every external call** — network failures return empty lists, pipeline continues
-- **Secrets never committed** — .env excluded via .gitignore
-- **Dual logging** — stdout for development, file for production monitoring
-- **Modular design** — ingest, analyze, store, visualize are fully separated functions
+- **Error handling at every external call** : network failures return empty lists, pipeline continues
+- **Secrets never committed**: .env excluded via .gitignore
+- **Dual logging**: stdout for development, file for production monitoring
+- **Modular design**: ingest, analyze, store, visualize are fully separated functions
