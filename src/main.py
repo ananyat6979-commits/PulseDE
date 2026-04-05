@@ -14,9 +14,29 @@ def analyze_sentiment(headlines):
     for headline, result in zip(headlines, results):
         print(f"\nHeadline: {headline}")
         print(f"Sentiment: {result['label']} (confidence: {round(result['score'] * 100, 2)}%)")
+    return results
+
+def save_results(headlines, results):
+    import json
+    from datetime import datetime
+    
+    output = []
+    for headline, result in zip(headlines, results):
+        output.append({
+            "timestamp": datetime.now().isoformat(),
+            "headline": headline,
+            "sentiment": result["label"],
+            "confidence": round(result["score"] * 100, 2)
+        })
+    
+    with open("data/results.json", "w") as f:
+        json.dump(output, f, indent=4)
+    
+    print("\nResults saved to data/results.json")
 
 if __name__ == "__main__":
     print("Fetching headlines...")
     headlines = fetch_headlines()
     print("Running FinBERT sentiment analysis...\n")
-    analyze_sentiment(headlines)
+    results = analyze_sentiment(headlines)
+    save_results(headlines, results)
