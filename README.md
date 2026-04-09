@@ -4,8 +4,7 @@ A real-time data engineering pipeline that fetches live financial headlines, run
 
 ## Architecture
 
-NewsAPI → fetch_headlines() → FinBERT Sentiment Model → JSON Storage → HTML Dashboard
-→ Log File
+NewsAPI → Producer → Kafka (KRaft) → Consumer → FinBERT → JSON Storage → Dashboard
 
 ## Tech Stack
 
@@ -17,6 +16,7 @@ NewsAPI → fetch_headlines() → FinBERT Sentiment Model → JSON Storage → H
 | Storage | JSON with timestamps | Structured, queryable output artifacts |
 | Observability | Python logging | Persistent logs for monitoring and debugging |
 | Dashboard | Python HTTP server + HTML | Live visualization of sentiment results |
+| Message Queue | Apache Kafka 4.2 (KRaft) | Decoupled producer/consumer pipeline |
 
 ## Why FinBERT over general sentiment models?
 
