@@ -236,26 +236,6 @@ Drift checks run automatically via the `pulsede-drift-check` Prefect flow every 
 
 ---
 
-## Recommended commit sequence
-
-```
-feat: add multi-model FinBERT ensemble with MC Dropout uncertainty
-feat: add temperature scaling calibration
-feat: add FinancialFeatureExtractor (NER, tickers, sectors, hedge, FLS)
-feat: migrate storage from JSON to TimescaleDB hypertable
-feat: add Redis cache + pub/sub + sliding-window rate limiter
-feat: upgrade FastAPI with JWT auth, WebSocket real-time stream
-feat: replace schedule with Prefect 2 orchestration
-feat: add Evidently-based drift detection (PSI, JS, chi-squared)
-feat: add research-grade evaluation metrics (ECE, Brier, PR-AUC, MCC)
-feat: upgrade dashboard to Streamlit with live WebSocket feed
-chore: add multi-stage Dockerfile (api/consumer/dashboard)
-chore: add full 11-service docker-compose with Prometheus + Grafana
-ci: add GitHub Actions (lint, type-check, test, security, Docker push)
-chore: migrate from requirements.txt to pyproject.toml
-docs: add world-class README with architecture, model rationale, eval guide
-```
-
 ---
 
 ## Tech stack decision record
@@ -299,4 +279,4 @@ git push origin feat/your-feature
 
 ---
 
-*Built to meet the engineering bar at top AI labs and quantitative firms.*
+
