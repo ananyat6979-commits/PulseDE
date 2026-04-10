@@ -1,4 +1,52 @@
-.env
-venv/
+# Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Environment & secrets — NEVER commit
+.env
+*.env.local
+
+# Data files
 data/
+*.json
+!tests/fixtures/*.json
+
+# ML artefacts
+*.pt
+*.safetensors
+mlruns/
+mlflow/
+checkpoints/
+
+# Logs
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Docker
+*.tar
+
+# OS
+.DS_Store
+Thumbs.db

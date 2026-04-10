@@ -1,0 +1,289 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PulseDE v2.0 — Full-Stack Docker Compose
+#
+# Services:
+#   kafka          — Apache Kafka 3.7 (KRaft, no ZooKeeper)
+#   schema-registry— Confluent Schema Registry
+#   timescaledb    — TimescaleDB 2.x (PostgreSQL + time-series extension)
+#   redis          — Redis 7 (cache, pub/sub, rate limit)
+#   mlflow         — MLflow tracking server (artifact store: local volume)
+#   prometheus     — Prometheus metrics scraper
+#   grafana        — Grafana dashboards
+#   prefect-server — Prefect 2 Orion server
+#   pulsede-api    — FastAPI serving layer
+#   pulsede-consumer — Kafka consumer + ML inference worker
+#   pulsede-dash   — Streamlit dashboard
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  pulsede:
+    driver: bridge
+
+volumes:
+  kafka_data:
+  timescale_data:
+  redis_data:
+  mlflow_data:
+  prometheus_data:
+  grafana_data:
+  prefect_data:
+
+services:
+
+  # ── Kafka (KRaft — no ZooKeeper) ──────────────────────────────────────────
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: pulsede-kafka
+    restart: unless-stopped
+    networks: [pulsede]
+    ports:
+      - "9092:9092"
+      - "9093:9093"       # Controller port
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 48
+      KAFKA_LOG_RETENTION_BYTES: 1073741824   # 1 GB
+      KAFKA_COMPRESSION_TYPE: snappy
+      KAFKA_CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+
+  # ── Schema Registry ────────────────────────────────────────────────────────
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.1
+    container_name: pulsede-schema-registry
+    restart: unless-stopped
+    networks: [pulsede]
+    ports:
+      - "8081:8081"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+
+  # ── TimescaleDB ────────────────────────────────────────────────────────────
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: pulsede-timescaledb
+    restart: unless-stopped
+    networks: [pulsede]
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: pulsede
+      POSTGRES_USER: pulsede
+      POSTGRES_PASSWORD: pulsede
+      TIMESCALEDB_TELEMETRY: "off"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./infra/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulsede"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      postgres
+        -c shared_preload_libraries=timescaledb
+        -c max_connections=200
+        -c shared_buffers=256MB
+        -c work_mem=16MB
+        -c maintenance_work_mem=128MB
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: pulsede-redis
+    restart: unless-stopped
+    networks: [pulsede]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+        --appendonly yes
+        --maxmemory 512mb
+        --maxmemory-policy allkeys-lru
+        --save 900 1
+        --save 300 10
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MLflow Tracking Server ─────────────────────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    container_name: pulsede-mlflow
+    restart: unless-stopped
+    networks: [pulsede]
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    command: >
+      mlflow server
+        --backend-store-uri sqlite:///mlflow/mlflow.db
+        --default-artifact-root /mlflow/artifacts
+        --host 0.0.0.0
+        --port 5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Prometheus ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: pulsede-prometheus
+    restart: unless-stopped
+    networks: [pulsede]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: pulsede-grafana
+    restart: unless-stopped
+    networks: [pulsede]
+    ports:
+      - "3000:3000"
+    depends_on: [prometheus, timescaledb]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: pulsede
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+
+  # ── Prefect Server ─────────────────────────────────────────────────────────
+  prefect-server:
+    image: prefecthq/prefect:2.19-python3.11
+    container_name: pulsede-prefect
+    restart: unless-stopped
+    networks: [pulsede]
+    ports:
+      - "4200:4200"
+    volumes:
+      - prefect_data:/root/.prefect
+    command: prefect server start --host 0.0.0.0
+    environment:
+      PREFECT_API_DATABASE_CONNECTION_URL: sqlite+aiosqlite:////root/.prefect/prefect.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── PulseDE FastAPI ────────────────────────────────────────────────────────
+  pulsede-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: pulsede-api
+    restart: unless-stopped
+    networks: [pulsede]
+    ports:
+      - "8080:8080"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_HOST: timescaledb
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  # ── PulseDE Consumer (ML inference worker) ─────────────────────────────────
+  pulsede-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: consumer
+    container_name: pulsede-consumer
+    restart: unless-stopped
+    networks: [pulsede]
+    depends_on:
+      pulsede-api:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_HOST: timescaledb
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    deploy:
+      resources:
+        limits:
+          memory: 8G    # 3 FinBERT models in memory
+
+  # ── PulseDE Streamlit Dashboard ────────────────────────────────────────────
+  pulsede-dash:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dashboard
+    container_name: pulsede-dash
+    restart: unless-stopped
+    networks: [pulsede]
+    ports:
+      - "8501:8501"
+    depends_on:
+      pulsede-api:
+        condition: service_healthy
+    environment:
+      API_BASE: http://pulsede-api:8080/v1
+      WS_URL: ws://pulsede-api:8080/ws/realtime
